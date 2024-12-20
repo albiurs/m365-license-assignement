@@ -10,7 +10,7 @@ $adminUsername = "digitagadm@schulezizersch.onmicrosoft.com"  # Replace with the
 # Domain to filter users (e.g., mycompany.com)
 $domain = "schueler.zizers.ch"  # Replace with the desired domain
 
-# SKU Identifier to assign (e.g., Office 365 A1 for Students)
+# SKU Identifier to assign (e.g., SKU_LICENSE_IDENTIFIER)
 $skuIdentifier = "STANDARDWOFFPACK_STUDENT"  # Replace with the desired SKU Identifier
 
 # ==============================
