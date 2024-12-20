@@ -2,6 +2,9 @@
 # Example values: ENTERPRISEPACK (M365 E3), ENTERPRISEPREMIUM (M365 E5), BUSINESS_BASIC, etc.
 # https://learn.microsoft.com/en-us/entra/identity/users/licensing-service-plan-reference
 
+# General Licenses:
+# Microsoft Power Automate Free             FLOW_FREE
+
 # Education:
 # Office 365 A1 (Education Faculty Pricing) 
 # Office 365 A1 (Education Student Pricing)	STANDARDWOFFPACK_STUDENT
