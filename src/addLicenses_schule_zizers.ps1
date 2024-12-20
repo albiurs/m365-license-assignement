@@ -89,7 +89,11 @@ foreach ($user in $domainUsers) {
         # Step 5.1: Get current licenses assigned to the user
         Write-Host "Fetching current licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
         $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
-        Write-Host "Current licenses: $([string]::Join(', ', $currentLicenses))" -ForegroundColor Blue
+        if ($null -eq $currentLicenses) {
+            Write-Host "Current licenses are not available." -ForegroundColor Blue
+        } else {
+            Write-Host "Current licenses: $([string]::Join(', ', $currentLicenses))" -ForegroundColor Blue
+        }
 
         # Step 5.2: Assign all licenses at once
         Write-Host "Assigning new licenses with SKU IDs: $($skuIds -join ', ') to user: $($user.UserPrincipalName)" -ForegroundColor Yellow
