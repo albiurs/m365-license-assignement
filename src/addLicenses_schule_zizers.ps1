@@ -1,4 +1,4 @@
-# Microsoft 365 PowerShell Script: Assign Licenses Based on Domain (without Tenant ID)
+# Microsoft 365 PowerShell Script: Assign Licenses Based on Domain with Reporting and Device Code Authentication
 
 # ==============================
 # Configuration Variables
@@ -7,7 +7,11 @@
 # Global Administrator Username
 $adminUsername = "digitagadm@schulezizersch.onmicrosoft.com"  # Replace with the email address of the Global Admin
 
-# Microsoft 365 PowerShell Script: Assign Licenses Based on Domain with Reporting and Device Code Authentication
+# Domain to filter users (e.g., mycompany.com)
+$domain = "schueler.zizers.ch"  # Replace with the desired domain
+
+# SKU Identifier to assign (e.g., Office 365 A1 for Students)
+$skuIdentifier = "STANDARDWOFFPACK_STUDENT"  # Replace with the desired SKU Identifier
 
 # ==============================
 # Script Starts Here
@@ -56,15 +60,11 @@ try {
     return
 }
 
-# Step 3: Prompt for domain and SKU ID
-$domain = Read-Host -Prompt "Enter the domain to filter users (e.g., @mycompany.com)"
-$skuPartNumber = Read-Host -Prompt "Enter the SKU Part Number to assign (e.g., STANDARDWOFFPACK_STUDENT)"
-
-# Step 4: Get the SkuId (GUID) of the selected SKU
-$sku = $availableSkus | Where-Object { $_.SkuPartNumber -eq $skuPartNumber }
+# Step 3: Get the SkuId (GUID) of the selected SKU
+$sku = $availableSkus | Where-Object { $_.SkuPartNumber -eq $skuIdentifier }
 
 if ($sku -eq $null) {
-    Write-Host "Invalid SKU Part Number entered." -ForegroundColor Red
+    Write-Host "Invalid SKU Identifier entered." -ForegroundColor Red
     Disconnect-MgGraph
     return
 }
@@ -72,7 +72,7 @@ if ($sku -eq $null) {
 $skuId = $sku.SkuId
 Write-Host "Selected SKU ID: $skuId" -ForegroundColor Green
 
-# Step 5: Filter users by domain (using Where-Object in PowerShell instead of $filter)
+# Step 4: Filter users by domain (using Where-Object in PowerShell instead of $filter)
 Write-Host "Fetching users with domain: $domain" -ForegroundColor Yellow
 try {
     # Fetch all users, and filter them locally by checking the userPrincipalName
@@ -91,35 +91,26 @@ try {
     return
 }
 
-# Step 6: Assign licenses and report
-Write-Host "Starting license assignment for SKU: $skuPartNumber" -ForegroundColor Yellow
+# Step 5: Assign licenses and report
+Write-Host "Starting license assignment for SKU: $skuIdentifier" -ForegroundColor Yellow
+
+$continueAll = $false  # Flag to track if the user chose "continue all"
 
 foreach ($user in $domainUsers) {
     try {
-        # Step 6.1: Get current licenses assigned to the user
+        # Step 5.1: Get current licenses assigned to the user
         Write-Host "Fetching current licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
         $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
         Write-Host "Current licenses: $([string]::Join(', ', $currentLicenses))" -ForegroundColor Blue
 
-        # # Step 6.2: Assign the new license
-        # Write-Host "Assigning new license ($skuPartNumber) to user: $($user.UserPrincipalName)" -ForegroundColor Yellow
-
-        # # Fetch current licenses to prevent duplication (optional)
-        # $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuId
-        # $existingSkuIds = $currentLicenses | Where-Object { $_ -ne $skuId }
-
-        # # Assign license, ensure we also provide the 'removeLicenses' parameter
-        # Set-MgUserLicense -UserId $user.Id -AddLicenses @{SkuId = $skuId} -RemoveLicenses $existingSkuIds
-        # Write-Host "License assigned successfully to user: $($user.UserPrincipalName)" -ForegroundColor Green
-
-        # Step 6.2: Assign the new license
-        Write-Host "Assigning new license ($skuPartNumber) to user: $($user.UserPrincipalName)" -ForegroundColor Yellow
+        # Step 5.2: Assign the new license
+        Write-Host "Assigning new license ($skuIdentifier) to user: $($user.UserPrincipalName)" -ForegroundColor Yellow
 
         # Assign license with an empty array for RemoveLicenses, ensuring no licenses are removed
         Set-MgUserLicense -UserId $user.Id -AddLicenses @{SkuId = $skuId} -RemoveLicenses @()
         Write-Host "License assigned successfully to user: $($user.UserPrincipalName)" -ForegroundColor Green
 
-        # Step 6.3: Fetch updated licenses
+        # Step 5.3: Fetch updated licenses
         Write-Host "Fetching updated licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
         $updatedLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
         Write-Host "Updated licenses: $([string]::Join(', ', $updatedLicenses))" -ForegroundColor Green
@@ -128,6 +119,18 @@ foreach ($user in $domainUsers) {
         Write-Host ""
         Write-Host "-------------------"
         Write-Host ""
+
+        # Step 5.4: Prompt for continuation if not in "continue all" mode
+        if (-not $continueAll) {
+            $continue = Read-Host "Do you want to continue to the next user? (y/n/a for continue all)"
+            if ($continue -eq "n") {
+                Write-Host "Stopping the script as requested." -ForegroundColor Yellow
+                break
+            } elseif ($continue -eq "a") {
+                $continueAll = $true
+            }
+        }
+
     } catch {
         Write-Host "Error while assigning license to user: $($user.UserPrincipalName)" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
