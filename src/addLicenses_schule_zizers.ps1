@@ -43,16 +43,27 @@ try {
 }
 
 # Step 3: Get the SkuIds (GUIDs) of the selected SKUs
-$skuIds = @()
-foreach ($skuIdentifier in $skuIdentifiers) {
-    $sku = $availableSkus | Where-Object { $_.SkuPartNumber -eq $skuIdentifier }
-    if ($sku -eq $null) {
-        Write-Host "Invalid SKU Identifier entered: $skuIdentifier" -ForegroundColor Red
-        Disconnect-MgGraph
-        return
+try {
+    $skuIds = @()
+    foreach ($skuIdentifier in $skuIdentifiers) {
+        try {
+            $sku = $null  # Explicitly initialize to null before comparison
+            $sku = $availableSkus | Where-Object { $_.SkuPartNumber -eq $skuIdentifier }
+            if ($null -eq $sku) {
+                Write-Host "Invalid SKU Identifier entered: $skuIdentifier" -ForegroundColor Red
+                Disconnect-MgGraph
+                return
+            }
+            $skuIds += $sku.SkuId
+            Write-Host "Selected SKU ID for "$skuIdentifier": $($sku.SkuId)" -ForegroundColor Green
+        } catch {
+            Write-Host "Error occurred while processing SKU Identifier: $skuIdentifier. Error: $($_.Exception.Message)" -ForegroundColor Red
+        }
     }
-    $skuIds += $sku.SkuId
-    Write-Host "Selected SKU ID for "$skuIdentifier": $($sku.SkuId)" -ForegroundColor Green
+} catch {
+    Write-Host "An unexpected error occurred. Error: $($_.Exception.Message)" -ForegroundColor Red
+    Disconnect-MgGraph  # Ensure cleanup happens on failure
+    return
 }
 
 Write-Host ""
@@ -88,6 +99,8 @@ foreach ($user in $domainUsers) {
     try {
         # Step 5.1: Get current licenses assigned to the user
         Write-Host "Fetching current licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
+        
+        $currentLicenses = $null
         $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
         if ($null -eq $currentLicenses) {
             Write-Host "Current licenses are not available." -ForegroundColor Blue
