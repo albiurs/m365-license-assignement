@@ -11,7 +11,7 @@ $adminUsername = "digitagadm@schulezizersch.onmicrosoft.com"  # Replace with the
 $domain = "schueler.zizers.ch"  # Replace with the desired domain
 
 # SKU Identifiers to assign (e.g., SKU_LICENSE_IDENTIFIER_1, SKU_LICENSE_IDENTIFIER_2)
-$skuIdentifiers = @("STANDARDWOFFPACK_STUDENT", "FLOW_FREE")  # Replace with the desired SKU Identifiers
+$skuIdentifiers = @("ENTERPRISEPACKPLUS_STUUSEBNFT", "FLOW_FREE")  # Replace with the desired SKU Identifiers
 
 # ==============================
 # Script Starts Here
@@ -99,19 +99,28 @@ foreach ($user in $domainUsers) {
     try {
         # Step 5.1: Get current licenses assigned to the user
         Write-Host "Fetching current licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
-        
-        $currentLicenses = $null
-        $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
+
+        # Get current licenses as SkuIds (GUIDs)
+        $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuId
         if ($null -eq $currentLicenses) {
             Write-Host "Current licenses are not available." -ForegroundColor Blue
         } else {
             Write-Host "Current licenses: $([string]::Join(', ', $currentLicenses))" -ForegroundColor Blue
         }
 
-        # Step 5.2: Assign all licenses at once
-        Write-Host "Assigning new licenses with SKU IDs: $($skuIds -join ', ') to user: $($user.UserPrincipalName)" -ForegroundColor Yellow
+        # Map SkuPartNumber to SkuId for licenses to remove
+        $existingSkuIds = $currentLicenses | Where-Object { $skuIds -notcontains $_ }
+
+        # Prepare the licenses to add
         $licensesToAdd = $skuIds | ForEach-Object { @{SkuId = $_} }
-        Set-MgUserLicense -UserId $user.Id -AddLicenses $licensesToAdd -RemoveLicenses @()
+
+        # Assign and remove licenses as needed
+        if (-not $existingSkuIds -or $existingSkuIds.Count -eq 0) {
+            Set-MgUserLicense -UserId $user.Id -AddLicenses $licensesToAdd -RemoveLicenses @()
+        } else {
+            Set-MgUserLicense -UserId $user.Id -AddLicenses $licensesToAdd -RemoveLicenses $existingSkuIds
+        }
+
         Write-Host "Licenses assigned successfully with SKU IDs: $($skuIds -join ', ') to user: $($user.UserPrincipalName)" -ForegroundColor Green
 
         # Step 5.3: Fetch updated licenses

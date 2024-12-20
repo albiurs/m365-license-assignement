@@ -114,6 +114,21 @@ foreach ($user in $domainUsers) {
         Write-Host "Fetching updated licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
         $updatedLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
         Write-Host "Updated licenses: $([string]::Join(', ', $updatedLicenses))" -ForegroundColor Green
+
+        Write-Host ""
+        Write-Host "-------------------"
+        Write-Host ""
+
+        # Step 5.4: Prompt for continuation if not in "continue all" mode
+        if (-not $continueAll) {
+            $continue = Read-Host "Do you want to continue to the next user? (y/n/a for continue all)"
+            if ($continue -eq "n") {
+                Write-Host "Stopping the script as requested." -ForegroundColor Yellow
+                break
+            } elseif ($continue -eq "a") {
+                $continueAll = $true
+            }
+        }
     } catch {
         Write-Host "Error while assigning license to user: $($user.UserPrincipalName)" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
