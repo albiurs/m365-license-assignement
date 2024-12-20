@@ -11,7 +11,7 @@ $adminUsername = "digitagadm@schulezizersch.onmicrosoft.com"  # Replace with the
 $domain = "schueler.zizers.ch"  # Replace with the desired domain
 
 # SKU Identifiers to assign (e.g., SKU_LICENSE_IDENTIFIER_1, SKU_LICENSE_IDENTIFIER_2)
-$skuIdentifiers = @("ENTERPRISEPACKPLUS_STUUSEBNFT", "FLOW_FREE")  # Replace with the desired SKU Identifiers
+$skuIdentifiers = @("ENTERPRISEPACKPLUS_STUUSEBNFT", "FLOW_FREE", "POWERAPPS_VIRAL", "STREAM")  # Replace with the desired SKU Identifiers
 
 # ==============================
 # Script Starts Here

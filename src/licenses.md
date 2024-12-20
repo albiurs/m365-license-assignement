@@ -11,8 +11,8 @@
 # Education:
 # Office 365 A1 (Education Faculty Pricing) 
 # Office 365 A1 (Education Student Pricing)	        STANDARDWOFFPACK_STUDENT
-# Office 365 A3 (Education Faculty Pricing)	
-# Office 365 A3 (Education Student Pricing)	
+# Office 365 A3 (Education Faculty Pricing)	        ENTERPRISEPACKPLUS_FACULTY
+# Office 365 A3 (Education Student Pricing)         
 # Office 365 A3 Student Use Benefit                 ENTERPRISEPACKPLUS_STUUSEBNFT
 
 # Edu depricated

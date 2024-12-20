@@ -5,7 +5,13 @@
 # ==============================
 
 # Global Administrator Username
-$adminUsername = "admin@mycompany.com"  # Replace with the email address of the Global Admin
+$adminUsername = "admin@mycompany.onmicrosoft.com"  # Replace with the email address of the Global Admin
+
+# Domain to filter users (e.g., mycompany.com)
+$domain = "mycompany.com"  # Replace with the desired domain
+
+# SKU Identifiers to assign (e.g., SKU_LICENSE_IDENTIFIER_1, SKU_LICENSE_IDENTIFIER_2)
+$skuIdentifiers = @("SKU_LICENSE_IDENTIFIER_1", "FLOW_SKU_LICENSE_IDENTIFIER_2FREE")  # Replace with the desired SKU Identifiers
 
 # ==============================
 # Script Starts Here
@@ -14,7 +20,6 @@ $adminUsername = "admin@mycompany.com"  # Replace with the email address of the 
 # Step 1: Log in to Microsoft 365 using Device Code Authentication
 Write-Host "Logging in to Microsoft 365 using Device Code Authentication..." -ForegroundColor Cyan
 try {
-    # Attempt to connect using Microsoft Graph
     Connect-MgGraph -Scopes "User.ReadWrite.All"
     Write-Host "Successfully logged in to Microsoft 365." -ForegroundColor Green
 } catch {
@@ -22,26 +27,9 @@ try {
     return
 }
 
-# ==============================
-# Fix Module Conflicts
-# ==============================
-
-# Check if any Microsoft.Graph related modules are loaded
-$loadedModules = Get-Module | Where-Object { $_.Name -like "Microsoft.Graph*" }
-if ($loadedModules) {
-    Write-Host "Removing conflicting Microsoft.Graph modules..." -ForegroundColor Yellow
-    # Unload all Microsoft Graph related modules
-    $loadedModules | ForEach-Object { Remove-Module -Name $_.Name -Force }
-}
-
-# Ensure that the Microsoft.Graph module is imported
-Write-Host "Importing the Microsoft.Graph module..." -ForegroundColor Yellow
-Import-Module Microsoft.Graph -Force
-
 # Step 2: List available SKUs with the number of licenses purchased and available
 Write-Host "Fetching available licenses (SKUs)..." -ForegroundColor Cyan
 try {
-    # Fetch subscribed SKUs, including purchased and available units
     $availableSkus = Get-MgSubscribedSku | Select-Object SkuId, SkuPartNumber, 
         @{Name="Purchased Licenses";Expression={$_.PrepaidUnits.Enabled}}, 
         @{Name="Available Licenses";Expression={$_.PrepaidUnits.Enabled - $_.ConsumedUnits}} 
@@ -54,34 +42,47 @@ try {
     return
 }
 
-# Step 3: Prompt for domain and SKU ID
-$domain = Read-Host -Prompt "Enter the domain to filter users (e.g., @mycompany.com)"
-$skuPartNumber = Read-Host -Prompt "Enter the SKU Part Number to assign (e.g., STANDARDWOFFPACK_STUDENT)"
-
-# Step 4: Get the SkuId (GUID) of the selected SKU
-$sku = $availableSkus | Where-Object { $_.SkuPartNumber -eq $skuPartNumber }
-
-if ($sku -eq $null) {
-    Write-Host "Invalid SKU Part Number entered." -ForegroundColor Red
-    Disconnect-MgGraph
+# Step 3: Get the SkuIds (GUIDs) of the selected SKUs
+try {
+    $skuIds = @()
+    foreach ($skuIdentifier in $skuIdentifiers) {
+        try {
+            $sku = $null  # Explicitly initialize to null before comparison
+            $sku = $availableSkus | Where-Object { $_.SkuPartNumber -eq $skuIdentifier }
+            if ($null -eq $sku) {
+                Write-Host "Invalid SKU Identifier entered: $skuIdentifier" -ForegroundColor Red
+                Disconnect-MgGraph
+                return
+            }
+            $skuIds += $sku.SkuId
+            Write-Host "Selected SKU ID for "$skuIdentifier": $($sku.SkuId)" -ForegroundColor Green
+        } catch {
+            Write-Host "Error occurred while processing SKU Identifier: $skuIdentifier. Error: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+} catch {
+    Write-Host "An unexpected error occurred. Error: $($_.Exception.Message)" -ForegroundColor Red
+    Disconnect-MgGraph  # Ensure cleanup happens on failure
     return
 }
 
-$skuId = $sku.SkuId
-Write-Host "Selected SKU ID: $skuId" -ForegroundColor Green
+Write-Host ""
+Write-Host "-------------------"
+Write-Host ""
 
-# Step 5: Filter users by domain (using Where-Object in PowerShell instead of $filter)
+# Step 4: Filter users by domain (using Where-Object in PowerShell instead of $filter)
 Write-Host "Fetching users with domain: $domain" -ForegroundColor Yellow
 try {
-    # Fetch all users, and filter them locally by checking the userPrincipalName
     $domainUsers = Get-MgUser -All | Where-Object { $_.UserPrincipalName.EndsWith($domain) }
-
     if ($domainUsers.Count -eq 0) {
         Write-Host "No users found with the domain $domain!" -ForegroundColor Red
         Disconnect-MgGraph
         return
     } else {
         Write-Host "$($domainUsers.Count) users found with the domain $domain." -ForegroundColor Green
+        Write-Host ""
+        Write-Host "-------------------"
+        Write-Host ""
     }
 } catch {
     Write-Host "Error while fetching or filtering users: $_.Exception.Message" -ForegroundColor Red
@@ -89,28 +90,40 @@ try {
     return
 }
 
-# Step 6: Assign licenses and report
-Write-Host "Starting license assignment for SKU: $skuPartNumber" -ForegroundColor Yellow
+# Step 5: Assign licenses and report
+Write-Host "Starting license assignment for SKUs: $($skuIdentifiers -join ", ")" -ForegroundColor Yellow
+
+$continueAll = $false  # Flag to track if the user chose "continue all"
 
 foreach ($user in $domainUsers) {
     try {
-        # Step 6.1: Get current licenses assigned to the user
+        # Step 5.1: Get current licenses assigned to the user
         Write-Host "Fetching current licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
-        $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
-        Write-Host "Current licenses: $([string]::Join(', ', $currentLicenses))" -ForegroundColor Blue
 
-        # Step 6.2: Assign the new license
-        Write-Host "Assigning new license ($skuPartNumber) to user: $($user.UserPrincipalName)" -ForegroundColor Yellow
-
-        # Fetch current licenses to prevent duplication (optional)
+        # Get current licenses as SkuIds (GUIDs)
         $currentLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuId
-        $existingSkuIds = $currentLicenses | Where-Object { $_ -ne $skuId }
+        if ($null -eq $currentLicenses) {
+            Write-Host "Current licenses are not available." -ForegroundColor Blue
+        } else {
+            Write-Host "Current licenses: $([string]::Join(', ', $currentLicenses))" -ForegroundColor Blue
+        }
 
-        # Assign license, ensure we also provide the 'removeLicenses' parameter
-        Set-MgUserLicense -UserId $user.Id -AddLicenses @{SkuId = $skuId} -RemoveLicenses $existingSkuIds
-        Write-Host "License assigned successfully to user: $($user.UserPrincipalName)" -ForegroundColor Green
+        # Map SkuPartNumber to SkuId for licenses to remove
+        $existingSkuIds = $currentLicenses | Where-Object { $skuIds -notcontains $_ }
 
-        # Step 6.3: Fetch updated licenses
+        # Prepare the licenses to add
+        $licensesToAdd = $skuIds | ForEach-Object { @{SkuId = $_} }
+
+        # Assign and remove licenses as needed
+        if (-not $existingSkuIds -or $existingSkuIds.Count -eq 0) {
+            Set-MgUserLicense -UserId $user.Id -AddLicenses $licensesToAdd -RemoveLicenses @()
+        } else {
+            Set-MgUserLicense -UserId $user.Id -AddLicenses $licensesToAdd -RemoveLicenses $existingSkuIds
+        }
+
+        Write-Host "Licenses assigned successfully with SKU IDs: $($skuIds -join ', ') to user: $($user.UserPrincipalName)" -ForegroundColor Green
+
+        # Step 5.3: Fetch updated licenses
         Write-Host "Fetching updated licenses for user: $($user.UserPrincipalName)" -ForegroundColor Cyan
         $updatedLicenses = (Get-MgUserLicenseDetail -UserId $user.Id).SkuPartNumber
         Write-Host "Updated licenses: $([string]::Join(', ', $updatedLicenses))" -ForegroundColor Green
@@ -129,6 +142,7 @@ foreach ($user in $domainUsers) {
                 $continueAll = $true
             }
         }
+
     } catch {
         Write-Host "Error while assigning license to user: $($user.UserPrincipalName)" -ForegroundColor Red
         Write-Host $_.Exception.Message -ForegroundColor Red
@@ -137,6 +151,4 @@ foreach ($user in $domainUsers) {
 
 # Completion
 Write-Host "License assignment complete. Script finished." -ForegroundColor Cyan
-
-# Log out of Microsoft 365
 Disconnect-MgGraph
